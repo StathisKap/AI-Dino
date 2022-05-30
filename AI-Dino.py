@@ -4,6 +4,7 @@ import random
 import math
 import sys
 import neat
+import glob 
 
 
 # make the dino chrome game
@@ -40,6 +41,7 @@ BG = pygame.image.load(os.path.join('Assets/Other', 'Track.png'))
 # import a font
 FONT = pygame.font.SysFont('comicsans', 20)
 
+checkpointer = neat.Checkpointer()
 
 class Dinosaur():
     X_POS = 80
@@ -233,10 +235,20 @@ def run(config_path):
         config_path)
 
     # Create the population, which is the top-level object for a NEAT run.
-    population = neat.Population(config)
+    checkpoints_list = glob.glob('neat-checkpoint-*')
+    if checkpoints_list != []:
+        max = checkpoints_list[0]
+        for checkpoint in checkpoints_list:
+            if checkpoint > max:
+                max = checkpoint
+        population = neat.Checkpointer.restore_checkpoint(max)
+        print(f'using checkpoint {max}')
+    else:
+        population = neat.Population(config)
 
     # Add a stdout reporter to show progress in the terminal.
     population.add_reporter(neat.StdOutReporter(True))
+    population.add_reporter(neat.Checkpointer(1, 60))
     stats = neat.StatisticsReporter()
     population.add_reporter(stats)
 
