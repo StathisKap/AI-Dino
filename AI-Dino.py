@@ -5,6 +5,7 @@ import math
 import sys
 import neat
 import glob 
+import visualize
 
 
 # make the dino chrome game
@@ -52,6 +53,7 @@ class Dinosaur():
         self.image = img
         self.dino_run = True
         self.dino_jump = False
+        self.big_jump = True
         self.jump_vel = self.JUMP_VEL    
         self.step_index = 0
         self.color = (random.randint(0, 200), random.randint(0, 200), random.randint(0, 200))
@@ -68,9 +70,13 @@ class Dinosaur():
 
     def jump(self):
         self.image = JUMPING
-        if self.jump:
-            self.rect.y -= self.jump_vel * 4
+        if self.dino_jump and self.big_jump == True:
+            self.rect.y -= self.jump_vel * 4.5
             self.jump_vel -= 0.8
+        elif self.dino_jump and self.big_jump == False:
+            self.rect.y -= self.jump_vel * 3.5
+            self.jump_vel -= 1
+        
         if self.jump_vel <= -self.JUMP_VEL:
             self.dino_jump = False
             self.dino_run= True
@@ -126,7 +132,7 @@ def distance(pos_a, pos_b):
 
 
 def eval_genomes(genomes, config):
-    global game_speed, x_pos_bg, y_pos_bg, points, dinosaurs, obstacles, ge, nets, points 
+    global game_speed, x_pos_bg, y_pos_bg, points, dinosaurs, obstacles, ge, nets, points, best_genome_current_gen
 
     clock = pygame.time.Clock()
     points = 0
@@ -135,6 +141,9 @@ def eval_genomes(genomes, config):
     obstacles = []
     ge = []
     nets = []
+
+    best_genome_current_gen = neat.DefaultGenome(None)
+    best_genome_current_gen.fitness = -1000
 
     x_pos_bg = 0
     y_pos_bg = 380
@@ -160,7 +169,7 @@ def eval_genomes(genomes, config):
     def statistics():
         global dinosaurs, game_speed, ge, population
         text_1 = FONT.render(f'Dinos Alive: {str(len(dinosaurs))}', True, (0, 0, 0))
-        text_2 = FONT.render(f'Generation: {population.generation+1}', True, (0, 0, 0))
+        text_2 = FONT.render(f'Generation: {population.generation}', True, (0, 0, 0))
         text_3 = FONT.render(f'Game Speed: {str(game_speed)}', True, (0, 0, 0))
 
         SCREEN.blit(text_1, (50, 450))
@@ -186,6 +195,7 @@ def eval_genomes(genomes, config):
         
         SCREEN.fill((255, 255, 255))
 
+
         for dinosaur in dinosaurs:
             dinosaur.update()
             dinosaur.draw(SCREEN)
@@ -205,22 +215,32 @@ def eval_genomes(genomes, config):
             obstacle.update()
             for i, dinosaur in enumerate(dinosaurs):
                 ge[i].fitness = points % 100
+                if ge[i].fitness > best_genome_current_gen.fitness:
+                    best_genome_current_gen = ge[i]
                 if dinosaur.rect.colliderect(obstacle.rect):
                     ge[i].fitness -= 50
                     remove(i)
 #        user_input = pygame.key.get_pressed()
 
         for i, dinosaur in enumerate(dinosaurs):
-            output = nets[i].activate((dinosaur.rect.y, distance((dinosaur.rect.x, dinosaur.rect.y), obstacle.rect.midtop)))
-            if output[0] > 0.5 and dinosaur.rect.y == dinosaur.Y_POS:
+            output = nets[i].activate((dinosaur.rect.y, distance((dinosaur.rect.x, dinosaur.rect.y), obstacle.rect.midtop), game_speed))
+            if output[1] > 0.9 and dinosaur.rect.y == dinosaur.Y_POS:
+                dinosaur.big_jump = False 
                 dinosaur.dino_jump = True
                 dinosaur.dino_run = False
+            if output[0] > 0.9 and dinosaur.rect.y == dinosaur.Y_POS:
+                dinosaur.big_jump = True
+                dinosaur.dino_jump = True
+                dinosaur.dino_run = False
+ 
+
         statistics()
         score()
         background()
         clock.tick(30)
         pygame.display.update()
-
+    node_names = {0:'Big Jump', 1:'Small Jump',-1: 'Y Position', -2: 'Distance to Obstacle', -3: 'Game Speed'}
+    visualize.draw_net(config, best_genome_current_gen, False, node_names=node_names,fmt='jpg')
   
 
 # Setup the NEAT
@@ -248,7 +268,7 @@ def run(config_path):
 
     # Add a stdout reporter to show progress in the terminal.
     population.add_reporter(neat.StdOutReporter(True))
-    population.add_reporter(neat.Checkpointer(1, 60))
+    population.add_reporter(neat.Checkpointer(5, 300))
     stats = neat.StatisticsReporter()
     population.add_reporter(stats)
 
@@ -256,6 +276,9 @@ def run(config_path):
 
     # Display the winning genome.
     print('\nBest genome:\n{!s}'.format(winner))
+    # Visualize the winning genome.
+
+
 
 if __name__ == '__main__':
     local_dir = os.path.dirname(__file__)
